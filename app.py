@@ -178,7 +178,7 @@ if prompt := st.chat_input("Teach Cozy..."):
             st.session_state.messages.append({"role": "assistant", "content": reply})
         else:
             st.session_state.topic = prompt
-            with st.status("Generating learning outcomes...", expanded=False):
+            with st.spinner("Generating learning outcomes...", expanded=False):
                 st.session_state.outcomes_agent.generate_outcomes(prompt)
 
             with st.chat_message("assistant"):
@@ -191,7 +191,7 @@ if prompt := st.chat_input("Teach Cozy..."):
     else:
         st.session_state.all_user_text.append(prompt)
 
-        with st.status("Checking coverage...", expanded=False):
+        with st.spinner("Checking coverage...", expanded=False):
             coverage = st.session_state.outcomes_agent.evaluate_coverage(
                 " ".join(st.session_state.all_user_text)
             )
@@ -202,7 +202,7 @@ if prompt := st.chat_input("Teach Cozy..."):
             reply = st.write_stream(st.session_state.agent.respond_stream(steered))
         st.session_state.messages.append({"role": "assistant", "content": reply})
 
-        with st.status("Verifying truthfulness...", expanded=False):
+        with st.spinner("Verifying truthfulness...", expanded=False):
             result = st.session_state.verifier.verify_conversation(
                 st.session_state.agent.history
             )
