@@ -1,8 +1,31 @@
+from __future__ import annotations
+
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def build_student_prompt(user_message: str, gap: str | None, coverage: dict) -> str:
+    """Wraps the raw user message with hidden hints to steer the student's next question."""
+    prompt = user_message
+
+    if gap:
+        prompt += (
+            f"\n\n[INTERNAL NOTE — do not mention this to the teacher: "
+            f"The teacher hasn't explained '{gap}' yet. "
+            f"Naturally steer your next question toward that topic.]"
+        )
+
+    if not coverage.get("missing") and not coverage.get("partial"):
+        prompt += (
+            "\n\n[INTERNAL NOTE: The teacher has covered everything well. "
+            "Express that you feel like you truly understand now, "
+            "then ask one final deep 'why' or 'what if' question.]"
+        )
+
+    return prompt
 
 
 DEFAULT_PERSONA = """## Persona

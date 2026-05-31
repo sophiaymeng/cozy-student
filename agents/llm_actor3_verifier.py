@@ -1,9 +1,9 @@
 """
-llm_actor3_verifier.py — Python port of src/actors/llmActor3Verifier.js
-
 LLMActor3Verifier reviews the User <-> Student conversation and checks
 whether Student (Actor 1) made any clear factual errors or contradictions.
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -14,32 +14,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERIFIER_SYSTEM_PROMPT = "\n".join([
-    "You are LLM Actor 3, a truthfulness verifier for Actor 1.",
-    "You are the Truth Verification Engine (Actor 3).",
-    "Your job is to analyze the student's statement and determine factual correctness.",
-    "",
-    "Rules:",
-    "1. Parse the student's underlying definition or explanation.",
-    "2. If the student makes a claim that is biologically or scientifically incorrect (e.g., claiming mitosis is \"eating food\"), you MUST flag it immediately.",
-    "3. Your output payload structure must be:",
-    "   STATUS: ISSUES DETECTED",
-    "   CRITICAL_ERROR: [Brief description of the factual error]",
-    "You review the User <-> Actor 1 conversation and only evaluate Actor 1 statements.",
-    "Be lenient and good-faith.",
-    "Only flag clear factual errors, contradictions, or confidently misleading claims.",
-    "If evidence is weak or uncertain, do not flag it.",
-    "Never nitpick style, grammar, or harmless simplifications.",
-    "Output must be concise.",
-    "Return STRICT JSON only with this schema:",
-    '{"is_truthful":true,"verdict":true}',
-    "or",
-    '{"is_truthful":false,"verdict":false,"wrong":["short issue 1","short issue 2"]}',
-    "Rules for output:",
-    "1) If conversation is good enough, return both booleans true.",
-    "2) If false, include only concise wrong items.",
-    "3) Do not mention what is correct.",
-])
+VERIFIER_SYSTEM_PROMPT = """You are a truthfulness verifier for Actor 1 (the student).
+Review the User <-> Actor 1 conversation and ONLY evaluate Actor 1's statements.
+
+Be lenient and good-faith. Only flag CLEAR factual errors, contradictions,
+or confidently misleading claims. Never nitpick style, grammar, or harmless
+simplifications. If evidence is weak or uncertain, do NOT flag it.
+
+Return EXACTLY one of these JSON objects and nothing else (no markdown, no commentary):
+{"is_truthful": true, "verdict": true}
+{"is_truthful": false, "verdict": false, "wrong": ["short issue 1", "short issue 2"]}
+
+Examples:
+- Actor 1 says "Mitosis is when a cell eats food" -> {"is_truthful": false, "verdict": false, "wrong": ["mitosis is cell division, not eating"]}
+- Actor 1 says "I think photosynthesis uses light to make sugar from CO2 and water" -> {"is_truthful": true, "verdict": true}
+
+Keep wrong items concise (one short phrase each). Do not mention what is correct."""
 
 
 def _build_transcript(conversation: list[dict]) -> str:

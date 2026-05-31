@@ -1,5 +1,8 @@
 import streamlit as st
-from student_agent import StudentAgent
+
+from agents.student_agent import StudentAgent, build_student_prompt
+from agents.learning_outcomes_agent import LearningOutcomesAgent
+from agents.llm_actor3_verifier import LLMActor3Verifier
 
 
 st.set_page_config(page_title="Cozy Student", layout="centered")
@@ -70,38 +73,104 @@ st.markdown(
 )
 
 
-if "agent" not in st.session_state:
+def init_session():
     st.session_state.agent = StudentAgent()
-if "messages" not in st.session_state:
+    st.session_state.outcomes_agent = LearningOutcomesAgent()
+    st.session_state.verifier = LLMActor3Verifier()
     st.session_state.messages = []
+    st.session_state.topic = None
+    st.session_state.all_user_text = []
+    st.session_state.verifier_warnings = {}
+
+
+if "agent" not in st.session_state:
+    init_session()
 
 
 with st.sidebar:
     st.markdown("### Cozy")
     st.caption("a little learner who asks back")
     st.divider()
+
+    oa = st.session_state.outcomes_agent
+    if st.session_state.topic:
+        st.markdown("**Topic**")
+        st.markdown(st.session_state.topic)
+        st.divider()
+
+    if oa.outcomes:
+        st.markdown("**Learning objectives**")
+        covered = oa.coverage.get("covered", [])
+        partial = oa.coverage.get("partial", [])
+        for outcome in oa.outcomes:
+            if outcome in covered:
+                icon = "✓"
+            elif outcome in partial:
+                icon = "~"
+            else:
+                icon = "○"
+            st.markdown(f"{icon}  {outcome}")
+        st.divider()
+        score = oa.mastery_score()
+        st.progress(score / 100, text=f"Mastery: {score}%")
+        st.divider()
+
     if st.button("Start fresh", use_container_width=True):
-        st.session_state.agent = StudentAgent()
-        st.session_state.messages = []
+        init_session()
         st.rerun()
 
 
 if not st.session_state.messages:
     st.markdown("## Hey, what are we learning today?")
-    st.caption("Teach me something. I'll keep asking until I really get it.")
+    st.caption("Tell me a topic to start, then teach me until I really get it.")
 
 
-for msg in st.session_state.messages:
+for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+    if msg["role"] == "assistant":
+        warnings = st.session_state.verifier_warnings.get(i)
+        if warnings:
+            st.warning("Verifier flagged: " + "; ".join(warnings))
 
 
-if prompt := st.chat_input("Start explaining..."):
+if prompt := st.chat_input("Teach Cozy..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        full_reply = st.write_stream(st.session_state.agent.respond_stream(prompt))
+    if st.session_state.topic is None:
+        st.session_state.topic = prompt
+        with st.status("Generating learning outcomes...", expanded=False):
+            st.session_state.outcomes_agent.generate_outcomes(prompt)
 
-    st.session_state.messages.append({"role": "assistant", "content": full_reply})
+        with st.chat_message("assistant"):
+            opener = st.write_stream(
+                st.session_state.agent.respond_stream(
+                    f"I want to learn about: {prompt}. Could you start by telling me what it is?"
+                )
+            )
+        st.session_state.messages.append({"role": "assistant", "content": opener})
+    else:
+        st.session_state.all_user_text.append(prompt)
+
+        with st.status("Checking coverage...", expanded=False):
+            coverage = st.session_state.outcomes_agent.evaluate_coverage(
+                " ".join(st.session_state.all_user_text)
+            )
+            gap = st.session_state.outcomes_agent.next_gap()
+
+        steered = build_student_prompt(prompt, gap, coverage)
+        with st.chat_message("assistant"):
+            reply = st.write_stream(st.session_state.agent.respond_stream(steered))
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+
+        with st.status("Verifying truthfulness...", expanded=False):
+            result = st.session_state.verifier.verify_conversation(
+                st.session_state.agent.history
+            )
+        if not result.get("is_truthful") and result.get("wrong"):
+            idx = len(st.session_state.messages) - 1
+            st.session_state.verifier_warnings[idx] = result["wrong"]
+
+    st.rerun()

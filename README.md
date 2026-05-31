@@ -51,7 +51,23 @@ Mastery Score Increases
 Learn
 ```
 
-## Current Agent Prototype
+## Project Layout
+
+```
+cozy-student/
+├── agents/                  Python agents (canonical implementation)
+│   ├── student_agent.py     Cozy, the student persona (Actor 1)
+│   ├── learning_outcomes_agent.py  Generates and tracks objectives
+│   └── llm_actor3_verifier.py      Truthfulness verifier (Actor 3)
+├── main.py                  CLI entry point (all three agents integrated)
+├── app.py                   Streamlit web UI
+├── .streamlit/              Theme config
+└── src/                     JS prototype (reference only, uses Hack Club AI)
+```
+
+The Python implementation in `agents/` is the canonical version and uses the CLōD API (`CLOD_API_KEY`). The Node.js code in `src/` is an earlier prototype kept for reference.
+
+## Current Agent Prototype (JS reference)
 
 This repository currently includes an agent framework prototype with:
 - `LLM Actor 1`: a strict beginner student that only uses what the user explicitly taught.

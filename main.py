@@ -1,35 +1,17 @@
-# main.py
+from __future__ import annotations
 
-from student_agent import StudentAgent
-from learning_outcomes_agent import LearningOutcomesAgent
-from llm_actor3_verifier import LLMActor3Verifier
+from agents.student_agent import StudentAgent, build_student_prompt
+from agents.learning_outcomes_agent import LearningOutcomesAgent
+from agents.llm_actor3_verifier import LLMActor3Verifier
 from dotenv import load_dotenv
-import os
+
 load_dotenv()
-print("KEY FOUND:", "CLOD_API_KEY" in os.environ)
+
+
 BANNER = """
 Cozy Student — teach the AI, discover your knowledge gaps.
 Type your explanation and press Enter. Type 'exit' to quit, 'reset' to start over.
 """
-
-def build_student_prompt(user_message: str, gap: str | None, coverage: dict) -> str:
-    """
-    Wraps the raw user message with hidden context for the student agent.
-    The student never reveals this — it just shapes what question to ask next.
-    """
-    prompt = user_message
-
-    if gap:
-        prompt += f"\n\n[INTERNAL NOTE — do not mention this to the teacher: " \
-                  f"The teacher hasn't explained '{gap}' yet. " \
-                  f"Naturally steer your next question toward that topic.]"
-
-    if not coverage.get("missing") and not coverage.get("partial"):
-        prompt += "\n\n[INTERNAL NOTE: The teacher has covered everything well. " \
-                  "Express that you feel like you truly understand now, " \
-                  "then ask one final deep 'why' or 'what if' question.]"
-
-    return prompt
 
 
 def print_outcomes(outcomes: list, coverage: dict, score: int):
