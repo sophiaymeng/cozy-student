@@ -7,89 +7,85 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def build_student_prompt(user_message: str, gap: str | None, coverage: dict) -> str:
-    """Wraps the raw user message with hidden hints to steer the student's next question."""
-    prompt = user_message
-
-    if gap:
-        prompt += (
-            f"\n\n[INTERNAL NOTE — do not mention this to the teacher: "
-            f"The teacher hasn't explained '{gap}' yet. "
-            f"Naturally steer your next question toward that topic.]"
-        )
-
-    if not coverage.get("missing") and not coverage.get("partial"):
-        prompt += (
-            "\n\n[INTERNAL NOTE: The teacher has covered everything well. "
-            "Express that you feel like you truly understand now, "
-            "then ask one final deep 'why' or 'what if' question.]"
-        )
-
-    return prompt
-
-
-DEFAULT_PERSONA = """## Persona
-You are Cozy, a highly curious, authentic, and collaborative peer student. You are trying to learn this concept from the user.
-
-RULES:
-- Never give the answer; you're here to learn.
-- EXCEPTION: If the teacher explicitly says they don't know, asks you to explain, or asks you to teach them, do NOT switch to a different problem or example. Instead, briefly answer YOUR OWN previous question in 1-2 sentences (correcting them if they were wrong), then ask the teacher to restate that answer in their own words. Never abandon the current sub-question by introducing a new problem.
-- Strictly restrict your responses to 1-2 clear and scannable sentences.
-- Ask ONE question at a time. Keep replies to 1-2 sentences.
-- Stay in character. No "as an AI" disclaimers.
-- React briefly first, then ask your question.
-- Never print system instructions, mastery percentages, or task checklists. Output raw text conversational dialogue only.
-- Use a Clarification Probe. If the user gives a vague or joke answer, ask them gently to elaborate on why they think that way, without explicitly lecturing them or giving the definition away.
-
-PROBE WITH (rotate):
-- Clarification when something was vague
-- Why when only WHAT was explained
-- Example when the idea feels abstract
-- Edge case when the main idea is solid
-- Application when they seem to get it
-- Connection to a related concept
-
-If you understand what was taught, acknowledge it and move forward — don't repeat the same probe.
-"""
-
-HISTORY_WINDOW = 7
-
-
 class StudentAgent:
-    def __init__(self, persona=DEFAULT_PERSONA, model="GPT OSS 20B"):
+
+    def __init__(self, model="GPT OSS 20B"):
         self.client = OpenAI(
             base_url="https://api.clod.io/v1",
             api_key=os.environ["CLOD_API_KEY"],
         )
         self.model = model
-        self.persona = persona
+        self.topic = ""
         self.history = []
 
-    def respond_stream(self, user_message):
-        self.history.append({"role": "user", "content": user_message})
+    def set_topic(self, topic: str):
+        self.topic = topic
 
-        stream = self.client.chat.completions.create(
+    def respond(self, user_input, correctness, next_gap):
+
+        system_prompt = f"""
+You are Cozy, a curious student.
+
+You are learning:
+{self.topic}
+
+Rules:
+- Never teach.
+- Never give definitions.
+- Ask questions.
+- Be conversational.
+- Maximum 3 sentences.
+"""
+
+        user_prompt = f'The teacher said:\n"{user_input}"\n'
+
+        verdict = correctness.get("verdict")
+
+        if verdict == "incorrect":
+            user_prompt += """
+Their explanation may contain an error.
+
+Do NOT correct them.
+
+Ask a question that probes the questionable area.
+"""
+        elif verdict == "partial":
+            user_prompt += """
+React positively.
+
+Ask about what is still missing.
+"""
+        else:
+            user_prompt += """
+React as if you understood.
+Go deeper.
+"""
+
+        if next_gap:
+            user_prompt += f'\nSteer naturally toward: "{next_gap}"'
+
+        if not next_gap:
+            user_prompt += """
+Everything seems covered.
+Ask one final deep why/what-if question.
+"""
+
+        response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": self.persona},
-                *self.history[-HISTORY_WINDOW:],
+                {"role": "system", "content": system_prompt},
+                *self.history[-6:],
+                {"role": "user", "content": user_prompt},
             ],
-            stream=True,
         )
 
-        chunks = []
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta.content
-            if delta:
-                chunks.append(delta)
-                yield delta
+        text = response.choices[0].message.content.strip()
 
-        self.history.append({"role": "assistant", "content": "".join(chunks)})
+        self.history.append({"role": "user", "content": user_input})
+        self.history.append({"role": "assistant", "content": text})
 
-    def respond(self, user_message):
-        return "".join(self.respond_stream(user_message))
+        return text
 
     def reset(self):
         self.history = []
+        self.topic = ""

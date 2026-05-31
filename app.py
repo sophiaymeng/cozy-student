@@ -1,6 +1,6 @@
 import streamlit as st
 
-from agents.student_agent import StudentAgent, build_student_prompt
+from agents.student_agent import StudentAgent
 from agents.learning_outcomes_agent import LearningOutcomesAgent
 from agents.llm_actor3_verifier import LLMActor3Verifier
 
@@ -13,7 +13,6 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
 
-    /* Apply Quicksand only to known text containers — leave Streamlit's chrome (icons, etc.) alone */
     [data-testid="stMarkdownContainer"],
     [data-testid="stMarkdownContainer"] p,
     [data-testid="stMarkdownContainer"] h1,
@@ -88,7 +87,6 @@ GREETING_WORDS = {
 
 
 def looks_like_greeting(text: str) -> bool:
-    """Heuristic: short casual messages that aren't a topic to teach."""
     t = text.strip().lower().rstrip("!.?")
     if len(t) < 4:
         return True
@@ -168,46 +166,41 @@ if prompt := st.chat_input("Teach Cozy..."):
 
     if st.session_state.topic is None:
         if looks_like_greeting(prompt):
-            greeting_prompt = (
-                f"The user just greeted you with: '{prompt}'. "
-                "Greet them back warmly as a curious student in one short sentence, "
-                "then ask what topic they'd like to teach you today."
-            )
+            reply = "Hi! What topic would you like to teach me today?"
             with st.chat_message("assistant"):
-                reply = st.write_stream(st.session_state.agent.respond_stream(greeting_prompt))
+                st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
         else:
             st.session_state.topic = prompt
+            st.session_state.agent.set_topic(prompt)
             with st.status("Generating learning outcomes...", expanded=False):
                 st.session_state.outcomes_agent.generate_outcomes(prompt)
 
+            opener = f"I want to learn about {prompt}. Could you explain what it is?"
             with st.chat_message("assistant"):
-                opener = st.write_stream(
-                    st.session_state.agent.respond_stream(
-                        f"I want to learn about: {prompt}. Could you start by telling me what it is?"
-                    )
-                )
+                st.markdown(opener)
             st.session_state.messages.append({"role": "assistant", "content": opener})
     else:
         st.session_state.all_user_text.append(prompt)
 
-        with st.status("Checking coverage...", expanded=False):
+        with st.status("Checking coverage and correctness...", expanded=False):
             coverage = st.session_state.outcomes_agent.evaluate_coverage(
                 " ".join(st.session_state.all_user_text)
             )
+            correctness = st.session_state.verifier.evaluate(
+                st.session_state.topic, prompt, st.session_state.agent.history
+            )
             gap = st.session_state.outcomes_agent.next_gap()
 
-        steered = build_student_prompt(prompt, gap, coverage)
+        with st.spinner("Cozy is thinking..."):
+            reply = st.session_state.agent.respond(prompt, correctness, gap)
         with st.chat_message("assistant"):
-            reply = st.write_stream(st.session_state.agent.respond_stream(steered))
+            st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
 
-        with st.status("Verifying truthfulness...", expanded=False):
-            result = st.session_state.verifier.verify_conversation(
-                st.session_state.agent.history
-            )
-        if not result.get("is_truthful") and result.get("wrong"):
+        if correctness.get("verdict") == "incorrect":
             idx = len(st.session_state.messages) - 1
-            st.session_state.verifier_warnings[idx] = result["wrong"]
+            feedback = correctness.get("feedback") or "Possible factual issue."
+            st.session_state.verifier_warnings[idx] = [feedback]
 
     st.rerun()
