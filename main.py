@@ -1,117 +1,91 @@
-from __future__ import annotations
+from dotenv import load_dotenv
 
-from agents.student_agent import StudentAgent, build_student_prompt
 from agents.learning_outcomes_agent import LearningOutcomesAgent
 from agents.llm_actor3_verifier import LLMActor3Verifier
-from dotenv import load_dotenv
+from agents.student_agent import StudentAgent
 
 load_dotenv()
 
 
-BANNER = """
-Cozy Student — teach the AI, discover your knowledge gaps.
-Type your explanation and press Enter. Type 'exit' to quit, 'reset' to start over.
-"""
+def print_outcomes(outcomes, coverage, score):
 
+    print(f"\nMastery: {score}%\n")
 
-def print_outcomes(outcomes: list, coverage: dict, score: int):
-    labels = {"covered": "✓", "partial": "~", "missing": "○"}
-    status_map = {}
-    for status in ("covered", "partial", "missing"):
-        for o in coverage.get(status, []):
-            status_map[o] = status
-    for o in outcomes:
-        status = status_map.get(o, "missing")
-        print(f"  {labels[status]} {o}")
-    print()
+    for outcome in outcomes:
 
+        if outcome in coverage["covered"]:
+            icon = "✓"
+        elif outcome in coverage["partial"]:
+            icon = "~"
+        else:
+            icon = "○"
 
-def print_verification(result: dict):
-    """Display Actor 3 Verifier result inline after each student response."""
-    if result.get("is_truthful"):
-        print("  [Actor 3] ✓ No issues detected")
-    else:
-        print("  [Actor 3] ⚠  Possible issues in student response:")
-        for issue in result.get("wrong", []):
-            print(f"    · {issue}")
+        print(f"{icon} {outcome}")
+
     print()
 
 
 def main():
-    student = StudentAgent()
-    outcomes_agent = LearningOutcomesAgent()
-    verifier = LLMActor3Verifier()
-    print(BANNER)
 
     topic = input("What are you teaching today? > ").strip()
-    if not topic:
-        return
 
-    # LearningOutcomesAgent: generate outcomes upfront
-    print("\n[Generating learning outcomes...]\n")
-    outcomes = outcomes_agent.generate_outcomes(topic)
-    print_outcomes(outcomes, outcomes_agent.coverage, outcomes_agent.mastery_score())
+    coverage_agent = LearningOutcomesAgent()
+    correctness_agent = LLMActor3Verifier()
+    student = StudentAgent()
 
-    # Agent 1: greet
-    print("Cozy: ", end="", flush=True)
-    for chunk in student.respond_stream(
-        f"I want to learn about: {topic}. Could you start by telling me what it is?"
-    ):
-        print(chunk, end="", flush=True)
-    print("\n")
+    student.set_topic(topic)
 
-    # Track all user explanations for cumulative coverage evaluation
+    outcomes = coverage_agent.generate_outcomes(topic)
+
     all_user_text = []
 
+    print_outcomes(
+        outcomes,
+        coverage_agent.coverage,
+        coverage_agent.mastery_score()
+    )
+
+    greeting = f"I want to learn about {topic}. Could you explain what it is?"
+    print(f"\nCozy: {greeting}\n")
+
     while True:
-        try:
-            user = input("You > ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nBye!")
-            break
 
-        if not user:
-            continue
+        user = input("You > ").strip()
+
         if user.lower() in {"exit", "quit"}:
-            print("Bye!")
             break
-        if user.lower() == "reset":
-            student.reset()
-            outcomes_agent.reset()
-            all_user_text = []
-            print("[conversation reset]\n")
-            topic = input("New topic > ").strip()
-            if topic:
-                print("\n[Generating learning outcomes...]\n")
-                outcomes = outcomes_agent.generate_outcomes(topic)
-                print_outcomes(outcomes, outcomes_agent.coverage, outcomes_agent.mastery_score())
-                print("Cozy: ", end="", flush=True)
-                for chunk in student.respond_stream(
-                    f"I want to learn about: {topic}. Could you start by telling me what it is?"
-                ):
-                    print(chunk, end="", flush=True)
-                print("\n")
-            continue
 
-        # LearningOutcomesAgent: evaluate coverage after every user message
         all_user_text.append(user)
-        coverage = outcomes_agent.evaluate_coverage(" ".join(all_user_text))
-        score = outcomes_agent.mastery_score()
-        gap = outcomes_agent.next_gap()
 
-        # Show updated outcomes tracker
-        print_outcomes(outcomes_agent.outcomes, coverage, score)
+        coverage = coverage_agent.evaluate_coverage(
+            " ".join(all_user_text)
+        )
 
-        # Agent 1: respond, steered toward the current gap
-        prompt = build_student_prompt(user, gap, coverage)
-        print("Cozy: ", end="", flush=True)
-        for chunk in student.respond_stream(prompt):
-            print(chunk, end="", flush=True)
-        print("\n")
+        correctness = correctness_agent.evaluate(
+            topic,
+            user,
+            student.history
+        )
 
-        # Actor 3 Verifier: check student's truthfulness after each response
-        verification = verifier.verify_conversation(student.history)
-        print_verification(verification)
+        score = coverage_agent.mastery_score()
+        gap = coverage_agent.next_gap()
+
+        print_outcomes(outcomes, coverage, score)
+
+        print(
+            f"[{correctness['verdict'].upper()}] "
+            f"{correctness['score']}/100"
+        )
+        print(correctness["feedback"])
+        print()
+
+        reply = student.respond(
+            user,
+            correctness,
+            gap
+        )
+
+        print(f"Cozy: {reply}\n")
 
 
 if __name__ == "__main__":
