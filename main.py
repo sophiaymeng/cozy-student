@@ -8,9 +8,6 @@ load_dotenv()
 
 
 def print_outcomes(outcomes, coverage, score):
-
-    print(f"\nMastery: {score}%\n")
-
     for outcome in outcomes:
 
         if outcome in coverage["covered"]:
