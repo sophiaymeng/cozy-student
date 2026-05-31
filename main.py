@@ -1,8 +1,8 @@
 # main.py
 
-
 from student_agent import StudentAgent
 from learning_outcomes_agent import LearningOutcomesAgent
+from llm_actor3_verifier import LLMActor3Verifier
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -46,16 +46,28 @@ def print_outcomes(outcomes: list, coverage: dict, score: int):
     print()
 
 
+def print_verification(result: dict):
+    """Display Actor 3 Verifier result inline after each student response."""
+    if result.get("is_truthful"):
+        print("  [Actor 3] ✓ No issues detected")
+    else:
+        print("  [Actor 3] ⚠  Possible issues in student response:")
+        for issue in result.get("wrong", []):
+            print(f"    · {issue}")
+    print()
+
+
 def main():
     student = StudentAgent()
     outcomes_agent = LearningOutcomesAgent()
+    verifier = LLMActor3Verifier()
     print(BANNER)
 
     topic = input("What are you teaching today? > ").strip()
     if not topic:
         return
 
-    # Agent 3: generate outcomes upfront
+    # LearningOutcomesAgent: generate outcomes upfront
     print("\n[Generating learning outcomes...]\n")
     outcomes = outcomes_agent.generate_outcomes(topic)
     print_outcomes(outcomes, outcomes_agent.coverage, outcomes_agent.mastery_score())
@@ -101,7 +113,7 @@ def main():
                 print("\n")
             continue
 
-        # Agent 3: evaluate coverage after every user message
+        # LearningOutcomesAgent: evaluate coverage after every user message
         all_user_text.append(user)
         coverage = outcomes_agent.evaluate_coverage(" ".join(all_user_text))
         score = outcomes_agent.mastery_score()
@@ -116,6 +128,10 @@ def main():
         for chunk in student.respond_stream(prompt):
             print(chunk, end="", flush=True)
         print("\n")
+
+        # Actor 3 Verifier: check student's truthfulness after each response
+        verification = verifier.verify_conversation(student.history)
+        print_verification(verification)
 
 
 if __name__ == "__main__":
