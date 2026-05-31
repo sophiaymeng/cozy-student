@@ -40,8 +40,15 @@ st.markdown(
         background-color: #FFFEFA !important;
     }
 
+    [data-testid="stChatInput"] div,
+    [data-testid="stChatInput"] textarea {
+        background-color: #FFFEFA !important;
+    }
+
     [data-testid="stChatInput"] textarea {
         font-size: 15px !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
     .stButton button {
@@ -71,6 +78,26 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+GREETING_WORDS = {
+    "hi", "hello", "hey", "yo", "sup", "hola", "howdy", "hai",
+    "good morning", "good afternoon", "good evening", "what's up", "whats up",
+    "how are you", "how's it going", "hows it going",
+}
+
+
+def looks_like_greeting(text: str) -> bool:
+    """Heuristic: short casual messages that aren't a topic to teach."""
+    t = text.strip().lower().rstrip("!.?")
+    if len(t) < 4:
+        return True
+    if t in GREETING_WORDS:
+        return True
+    first = t.split()[0] if t.split() else ""
+    if first in {"hi", "hello", "hey", "yo", "sup", "hola"} and len(t) < 20:
+        return True
+    return False
 
 
 def init_session():
@@ -140,17 +167,27 @@ if prompt := st.chat_input("Teach Cozy..."):
         st.markdown(prompt)
 
     if st.session_state.topic is None:
-        st.session_state.topic = prompt
-        with st.status("Generating learning outcomes...", expanded=False):
-            st.session_state.outcomes_agent.generate_outcomes(prompt)
-
-        with st.chat_message("assistant"):
-            opener = st.write_stream(
-                st.session_state.agent.respond_stream(
-                    f"I want to learn about: {prompt}. Could you start by telling me what it is?"
-                )
+        if looks_like_greeting(prompt):
+            greeting_prompt = (
+                f"The user just greeted you with: '{prompt}'. "
+                "Greet them back warmly as a curious student in one short sentence, "
+                "then ask what topic they'd like to teach you today."
             )
-        st.session_state.messages.append({"role": "assistant", "content": opener})
+            with st.chat_message("assistant"):
+                reply = st.write_stream(st.session_state.agent.respond_stream(greeting_prompt))
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+        else:
+            st.session_state.topic = prompt
+            with st.status("Generating learning outcomes...", expanded=False):
+                st.session_state.outcomes_agent.generate_outcomes(prompt)
+
+            with st.chat_message("assistant"):
+                opener = st.write_stream(
+                    st.session_state.agent.respond_stream(
+                        f"I want to learn about: {prompt}. Could you start by telling me what it is?"
+                    )
+                )
+            st.session_state.messages.append({"role": "assistant", "content": opener})
     else:
         st.session_state.all_user_text.append(prompt)
 
