@@ -1,9 +1,9 @@
 """
-llm_actor3_verifier.py — Python port of src/actors/llmActor3Verifier.js
-
 LLMActor3Verifier reviews the User <-> Student conversation and checks
 whether Student (Actor 1) made any clear factual errors or contradictions.
 """
+
+from __future__ import annotations
 
 import json
 import os

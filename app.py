@@ -1,5 +1,5 @@
 import streamlit as st
-from student_agent import StudentAgent
+from agents.student_agent import StudentAgent
 
 
 st.set_page_config(page_title="Cozy Student", layout="centered")

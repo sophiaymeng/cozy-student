@@ -1,12 +1,13 @@
-# main.py
+from __future__ import annotations
 
-from student_agent import StudentAgent
-from learning_outcomes_agent import LearningOutcomesAgent
-from llm_actor3_verifier import LLMActor3Verifier
+from agents.student_agent import StudentAgent
+from agents.learning_outcomes_agent import LearningOutcomesAgent
+from agents.llm_actor3_verifier import LLMActor3Verifier
 from dotenv import load_dotenv
-import os
+
 load_dotenv()
-print("KEY FOUND:", "CLOD_API_KEY" in os.environ)
+
+
 BANNER = """
 Cozy Student — teach the AI, discover your knowledge gaps.
 Type your explanation and press Enter. Type 'exit' to quit, 'reset' to start over.
