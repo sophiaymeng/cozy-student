@@ -38,8 +38,6 @@ def print_outcomes(outcomes: list, coverage: dict, score: int):
     for status in ("covered", "partial", "missing"):
         for o in coverage.get(status, []):
             status_map[o] = status
-
-    print(f"\n  Mastery: {score}%")
     for o in outcomes:
         status = status_map.get(o, "missing")
         print(f"  {labels[status]} {o}")
