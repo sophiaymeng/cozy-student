@@ -1,0 +1,13 @@
+{
+  "name": "cozy-student",
+  "version": "1.0.0",
+  "description": "Agent framework with Actor 1 and truthfulness-checking Actor 3 using Hack Club AI",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "demo": "node src/index.js --demo"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
